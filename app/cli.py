@@ -83,6 +83,14 @@ def main(ctx: typer.Context):
             sys.exit(0)
 
 @app.command()
+def languages():
+    """List supported target languages."""
+    console.print("[bold]Supported Target Languages:[/bold]")
+    for i, lang in enumerate(SUPPORTED_LANGUAGES, 1):
+        console.print(f"{i}. {lang.capitalize()}")
+    console.print()
+
+@app.command()
 def translate(
     input_file: str = typer.Argument(..., help="Path to input file"),
     to: str = typer.Option(..., "--to", help="Target language"),
