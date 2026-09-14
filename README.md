@@ -35,24 +35,15 @@ English to:
 - Telugu
 
 ## Architecture
-```
-[Input Document (TXT/PDF/DOCX/IMG)]
-        │
-        ▼
-[Extration Layer (PyMuPDF/docx/Tesseract)] ──► Output: Unified Document Model
-        │
-        ▼
-[Processing Layer (Semantic Chunker)] ──► Splits by max chars/paragraphs
-        │
-        ▼
-[Translation Layer (Groq API + Glossary)] ──► Context-aware translation
-        │
-        ▼
-[Validation Layer (Deterministic Checks)] ──► Output: Warnings if issues found
-        │
-        ▼
-[Output Layer (TXT/DOCX Generator)] ──► Translated Document
-```
+
+### Overall Pipeline
+![Overall Pipeline](overall-pipeline.png)
+
+### Runtime Execution
+![Runtime Workflow](runtime.png)
+
+### Data Models
+![Data Models](data-model.png)
 
 ## Technology Stack
 - **Language**: Python 3.9+
@@ -61,26 +52,7 @@ English to:
 - **Document Processing**: PyMuPDF (fitz), python-docx
 - **OCR**: pytesseract, Pillow (PIL)
 - **Testing**: pytest
-
-## Project Structure
-```text
-cipam-translator/
-├── app/
-│   ├── extractors/     # Parsers for PDF, DOCX, TXT, Images
-│   ├── processing/     # Chunking and Validation logic
-│   ├── translation/    # Groq integration, Prompts, Glossary
-│   ├── output/         # TXT and DOCX generators
-│   ├── cli.py          # Command Line Interface (Typer/Rich)
-│   ├── pipeline.py     # Main orchestration pipeline
-│   ├── models.py       # Dataclasses
-│   ├── config.py       # Environment variables
-│   └── exceptions.py   # Custom error handling
-├── tests/              # Pytest test suite (51 tests)
-├── .env                # API Keys
-├── pyproject.toml      # Dependencies & Build config
-└── README.md
-```
-
+ 
 ## Installation
 
 1. **Clone the repository**:
