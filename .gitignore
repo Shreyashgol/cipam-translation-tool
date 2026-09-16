@@ -16,3 +16,4 @@ output/*
 cipam_translator.egg-info/
 build/
 dist/
+MagicMock/
