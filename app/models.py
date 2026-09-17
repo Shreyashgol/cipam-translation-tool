@@ -25,3 +25,5 @@ class TranslationResult:
     chunk_id: str
     translated_text: str
     target_language: str
+
+# Data models for document translation workflow
