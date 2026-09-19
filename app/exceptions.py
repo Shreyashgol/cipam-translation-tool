@@ -17,3 +17,5 @@ class OutputError(CIPAMError):
 class ConfigurationError(CIPAMError):
     """Error in configuration (e.g. missing API key)."""
     pass
+
+# Custom exceptions for CIPAM translation pipeline
