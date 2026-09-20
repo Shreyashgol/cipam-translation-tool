@@ -1,6 +1,7 @@
 import re
+import asyncio
 from dataclasses import dataclass, field
-from typing import List
+from typing import List, Optional
 from app.models import TranslationChunk, TranslationResult
 
 @dataclass
@@ -92,4 +93,55 @@ def validate_translation(
             message="Translation results are not in the expected chunk order"
         )
 
+    return validation
+
+async def run_llm_validation(
+    chunks: List[TranslationChunk], 
+    results: List[TranslationResult], 
+    translator, 
+    target_language: str, 
+    glossary: Optional[dict] = None, 
+    max_concurrency: int = 5
+) -> ValidationResult:
+    """Uses the LLM to judge translation terminology and flow."""
+    validation = ValidationResult()
+    result_map = {r.chunk_id: r for r in results}
+    semaphore = asyncio.Semaphore(max_concurrency)
+    
+    async def _validate_chunk(chunk):
+        result = result_map.get(chunk.chunk_id)
+        if not result or not result.translated_text:
+            return None
+            
+        system_prompt = (
+            f"You are an expert IPR terminology evaluator. "
+            f"Review this translation from English to {target_language}.\n"
+            f"If there is a severe terminology mismatch, grammatical error, or it loses critical meaning, reply exactly with 'FAIL: <reason>'.\n"
+            f"Otherwise, reply exactly with 'PASS'."
+        )
+        
+        if glossary:
+            system_prompt += "\n\nGlossary that MUST be followed:\n"
+            for eng, trans in glossary.items():
+                system_prompt += f"- {eng}: {trans}\n"
+                
+        prompt = f"Source:\n{chunk.source_text}\n\nTranslation:\n{result.translated_text}"
+        
+        async with semaphore:
+            try:
+                res = await translator._async_call_groq(system_prompt, prompt)
+                if res.startswith("FAIL"):
+                    return ValidationWarning(chunk.chunk_id, "llm_judge_fail", res)
+            except Exception as e:
+                return ValidationWarning(chunk.chunk_id, "llm_judge_error", f"Judge API error: {e}")
+        return None
+
+    tasks = [_validate_chunk(chunk) for chunk in chunks]
+    warnings = await asyncio.gather(*tasks)
+    
+    for w in warnings:
+        if w:
+            validation.warnings.append(w)
+            validation.passed = False
+            
     return validation

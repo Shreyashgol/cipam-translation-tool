@@ -1,11 +1,12 @@
 import os
+import asyncio
 from typing import Optional
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
 
 from app.extractors import extract_document
 from app.processing.chunker import chunk_document
-from app.processing.validator import validate_translation
+from app.processing.validator import validate_translation, run_llm_validation
 from app.translation.translator import Translator
 from app.translation.glossary import get_glossary_for_language
 from app.output.txt import write_txt
@@ -40,38 +41,43 @@ class Pipeline:
         # 3. Glossary
         glossary = get_glossary_for_language(target_language)
 
-        # 4. Translate
         c.print("[cyan]Translating...[/cyan]")
         translator = self.translator or Translator()
-
-        results = []
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
-            TaskProgressColumn(),
-            console=c
-        ) as progress:
-            task = progress.add_task("Translating...", total=len(chunks))
-
-            for i, chunk in enumerate(chunks):
-                translated_text = translator.translate(
-                    chunk.source_text, target_language.capitalize(), glossary=glossary
-                )
-                results.append(
-                    TranslationResult(
-                        chunk_id=chunk.chunk_id,
-                        translated_text=translated_text,
-                        target_language=target_language.lower()
-                    )
-                )
-                progress.advance(task)
+        
+        with c.status("[cyan]Translating chunks concurrently...[/cyan]"):
+            # Run the batch translation asynchronously (limit concurrency due to rate limits)
+            batch_results = asyncio.run(translator.translate_batch(chunks, target_language, glossary, max_concurrency=2))
+        
+        # Convert results to TranslationResult models
+        results = [
+            TranslationResult(
+                chunk_id=r["chunk_id"],
+                translated_text=r["translated_text"],
+                target_language=r["target_language"]
+            )
+            for r in batch_results
+        ]
+        
+        # Sort results to maintain original order since async operations might complete out of order
+        chunk_order = {chunk.chunk_id: i for i, chunk in enumerate(chunks)}
+        results.sort(key=lambda r: chunk_order.get(r.chunk_id, 0))
 
         c.print("[green]✓ Translation completed[/green]\n")
 
         # 5. Validate
-        c.print("[cyan]Validating...[/cyan]")
+        c.print("[cyan]Validating (Deterministic)...[/cyan]")
         validation = validate_translation(chunks, results)
+        
+        c.print("[cyan]Validating (LLM-as-a-Judge)...[/cyan]")
+        with c.status("[cyan]Running AI quality checks...[/cyan]"):
+            llm_validation = asyncio.run(
+                run_llm_validation(chunks, results, translator, target_language, glossary, max_concurrency=2)
+            )
+            
+        validation.warnings.extend(llm_validation.warnings)
+        if not llm_validation.passed:
+            validation.passed = False
+
         if validation.passed:
             c.print("[green]✓ No critical validation issues[/green]\n")
         else:

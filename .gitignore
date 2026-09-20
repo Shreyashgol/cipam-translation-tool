@@ -17,3 +17,4 @@ cipam_translator.egg-info/
 build/
 dist/
 MagicMock/
+.DS_Store
